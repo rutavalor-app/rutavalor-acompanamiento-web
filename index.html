@@ -81,6 +81,7 @@
     setText('carga',bat&&typeof bat.cargando==='boolean'?(bat.cargando?'Cargando':'No está cargando'):'Sin lectura reciente');
     setText('hora',formatted(data.ultima_actualizacion_at));
     setText('reciente',data.telemetria_reciente?'Última lectura capturada dentro de los últimos 10 minutos.':'No hay una lectura reciente; no se muestra batería ni ubicación como si fueran actuales.');
+    show('seccion-ubicacion',data.permiso_ubicacion===true);
     var m=data.permiso_ubicacion===true&&data.ubicacion_compartida===true?data.ubicacion:null;
     var lat=m?Number(m.latitud):NaN,lon=m?Number(m.longitud):NaN;
     if(m&&Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180){
@@ -91,7 +92,7 @@
     } else {
       validMap=null;mapOpen=false;byId('mapa').src='about:blank';
       show('mapa',false);show('aviso-tercero',false);show('mostrar-mapa',false);
-      setText('permiso',data.permiso_ubicacion?'No hay una ubicación reciente disponible.':'El conductor no autorizó compartir su ubicación con este contacto.');
+    setText('permiso','No hay una ubicación reciente disponible.');
     }
     setText('consultado','Última consulta: '+formatted(new Date().toISOString()));
   }
