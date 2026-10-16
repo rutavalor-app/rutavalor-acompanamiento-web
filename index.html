@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <title>RutaValor | Seguimiento autorizado</title>
+  <style>
+    :root {font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#193b48;background:#f2f7f9}
+    * {box-sizing:border-box}body{margin:0}header{background:#073d51;color:white;padding:25px 16px}
+    .wrap{max-width:640px;margin:auto}h1{font-size:23px;margin:5px 0 8px}h2{font-size:18px;margin:0 0 14px}
+    header p{font-size:14px;color:#c5e4ec;margin:0}header small{font-weight:700;letter-spacing:.08em;color:#8ee0f1}
+    main{padding:16px 16px 35px}.panel{background:white;border:1px solid #e2ebee;border-radius:16px;padding:17px;margin:0 0 12px;box-shadow:0 5px 18px #1244570a}
+    .status{display:inline-block;font-size:13px;font-weight:800;border-radius:22px;background:#e9f4f7;color:#0b6076;padding:8px 11px}
+    .warn{background:#fff3df;color:#8b5f17}.label{color:#627e88;text-transform:uppercase;font-size:11px;letter-spacing:.06em;font-weight:750}
+    .value{font-size:20px;font-weight:780;margin:8px 0 5px}.note{font-size:13px;color:#536e7a;line-height:1.55;margin:7px 0 0}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.hidden{display:none!important}
+    .row{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    button{appearance:none;border:0;border-radius:11px;background:#007290;color:white;padding:12px 16px;font-size:14px;font-weight:750;cursor:pointer}
+    button:disabled{opacity:.5;cursor:default}#mapa{display:block;width:100%;height:300px;border:0;border-radius:12px;margin:15px 0 5px}
+    footer{font-size:12px;line-height:1.5;color:#647d87;margin:16px 3px 0}
+    @media(max-width:410px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header><div class="wrap"><small>RUTAVALOR ACOMPAÑAMIENTO</small><h1>Seguimiento autorizado</h1><p>Información temporal para un contacto que asumió la alerta.</p></div></header>
+<main class="wrap">
+  <section id="cargando" class="panel" role="status"><span class="status">Verificando acceso…</span></section>
+  <section id="denegado" class="panel hidden" role="status"><span class="status warn">Acceso no disponible</span><p class="note">La alerta fue resuelta, el enlace venció o no está autorizado. Si corresponde, solicita un nuevo acceso al conductor.</p></section>
+  <section id="principal" class="hidden">
+    <div class="panel"><div class="row"><span class="status warn" id="alerta">Seguimiento activo</span><span class="label" id="prioridad"></span></div><p class="note">Asumir seguimiento no significa confirmar que el conductor está bien.</p></div>
+    <div class="grid">
+      <section class="panel"><div class="label">Comunicación</div><p class="value" id="comunicacion">—</p><p class="note">Estado reportado por RutaValor.</p></section>
+      <section class="panel"><div class="label">Batería del celular</div><p class="value" id="bateria">—</p><p class="note" id="carga">Sin datos</p></section>
+    </div>
+    <section class="panel"><div class="label">Última actualización</div><p class="value" id="hora">—</p><p class="note" id="reciente"></p></section>
+    <section class="panel"><h2>Ubicación del conductor</h2><p class="note" id="permiso">Comprobando autorización…</p>
+      <button type="button" id="mostrar-mapa" class="hidden">Ver ubicación en mapa</button>
+      <iframe id="mapa" class="hidden" title="Mapa de ubicación aproximada" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <p class="note hidden" id="aviso-tercero">El mapa utiliza OpenStreetMap solamente cuando decides abrirlo y puede compartir la ubicación consultada con ese servicio.</p>
+    </section>
+    <div class="row"><p class="note" id="consultado"></p><button type="button" id="refrescar">Actualizar</button></div>
+  </section>
+  <footer>Acceso personal y temporal. No compartas este enlace. Los datos pueden retrasarse si el celular pierde señal o batería. Para una urgencia real, comunícate con los servicios de emergencia locales.</footer>
+</main>
+<script>
+(function(){
+  'use strict';
+  var API='https://rvsalufadckpcbgbgjrr.supabase.co/functions/v1/consultar-seguimiento-contacto';
+  var fragment=/^#t=([A-Za-z0-9_-]{43})$/.exec(location.hash);
+  var token=fragment ? fragment[1] : null;
+  history.replaceState(null,'',location.pathname+location.search);
+  var byId=function(id){return document.getElementById(id)};
+  var setText=function(id,value){byId(id).textContent=value == null ? '—' : String(value)};
+  var show=function(id,visible){byId(id).classList.toggle('hidden',!visible)};
+  var validMap=null, mapOpen=false, gotData=false, busy=false;
+  function formatted(value){
+    if(!value)return 'No disponible';
+    var dt=new Date(value);
+    return isNaN(dt.getTime())?'No disponible':new Intl.DateTimeFormat('es',{dateStyle:'medium',timeStyle:'medium'}).format(dt);
+  }
+  function revoke(){
+    token=null;validMap=null;mapOpen=false;byId('mapa').src='about:blank';
+    show('cargando',false);show('principal',false);show('denegado',true);
+  }
+  function renderMap(){
+    if(!validMap)return;
+    var lat=validMap.lat,lon=validMap.lon,delta=0.005;
+    var url=new URL('https://www.openstreetmap.org/export/embed.html');
+    url.searchParams.set('bbox',[lon-delta,lat-delta,lon+delta,lat+delta].join(','));
+    url.searchParams.set('layer','mapnik');url.searchParams.set('marker',lat+','+lon);
+    byId('mapa').src=url.toString();show('mapa',true);show('aviso-tercero',true);mapOpen=true;
+  }
+  function render(data){
+    show('cargando',false);show('denegado',false);show('principal',true);
+    setText('alerta',data.tipo_alerta==='comunicacion'?'Comunicación interrumpida':'Alerta de bienestar');
+    setText('prioridad','CONTACTO '+data.prioridad_contacto);
+    setText('comunicacion',data.estado_comunicacion==='normal'?'Normal':data.estado_comunicacion==='interrumpida'?'Interrumpida':'Sin información');
+    var bat=data.bateria;
+    setText('bateria',bat&&typeof bat.porcentaje==='number'?bat.porcentaje+' %':'No disponible');
+    setText('carga',bat&&typeof bat.cargando==='boolean'?(bat.cargando?'Cargando':'No está cargando'):'Sin lectura reciente');
+    setText('hora',formatted(data.ultima_actualizacion_at));
+    setText('reciente',data.telemetria_reciente?'Última lectura capturada dentro de los últimos 10 minutos.':'No hay una lectura reciente; no se muestra batería ni ubicación como si fueran actuales.');
+    var m=data.permiso_ubicacion===true&&data.ubicacion_compartida===true?data.ubicacion:null;
+    var lat=m?Number(m.latitud):NaN,lon=m?Number(m.longitud):NaN;
+    if(m&&Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180){
+      validMap={lat:lat,lon:lon};
+      setText('permiso','Ubicación autorizada. Última posición: '+formatted(m.capturada_at)+'.');
+      show('mostrar-mapa',true);
+      if(mapOpen)renderMap();
+    } else {
+      validMap=null;mapOpen=false;byId('mapa').src='about:blank';
+      show('mapa',false);show('aviso-tercero',false);show('mostrar-mapa',false);
+      setText('permiso',data.permiso_ubicacion?'No hay una ubicación reciente disponible.':'El conductor no autorizó compartir su ubicación con este contacto.');
+    }
+    setText('consultado','Última consulta: '+formatted(new Date().toISOString()));
+  }
+  async function refresh(){
+    if(!token||busy)return;busy=true;byId('refrescar').disabled=true;
+    try{
+      var res=await fetch(API,{method:'POST',mode:'cors',credentials:'omit',redirect:'error',cache:'no-store',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})});
+      if(res.status===403){revoke();return}
+      if(!res.ok)throw new Error('No se pudo consultar');
+      var data=await res.json();if(!data||data.ok!==true){revoke();return}
+      render(data);gotData=true;
+    }catch(e){
+      // Ante fallas de conexión no conservar una ubicación antigua en pantalla.
+      // El contacto podrá abrir nuevamente el enlace privado cuando haya conexión.
+      revoke();
+    }finally{busy=false;byId('refrescar').disabled=false;}
+  }
+  byId('refrescar').addEventListener('click',refresh);
+  byId('mostrar-mapa').addEventListener('click',renderMap);
+  if(token)refresh();else revoke();
+  setInterval(function(){if(!document.hidden&&token)refresh()},30000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&token)refresh()});
+})();
+</script>
+</body>
+</html>
