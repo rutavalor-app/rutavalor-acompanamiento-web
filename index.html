@@ -47,9 +47,10 @@
 (function(){
   'use strict';
   var API='https://rvsalufadckpcbgbgjrr.supabase.co/functions/v1/consultar-seguimiento-contacto';
-  var fragment=/^#t=([A-Za-z0-9_-]{43})$/.exec(location.hash);
-  var token=fragment ? fragment[1] : null;
-  history.replaceState(null,'',location.pathname+location.search);
+var fragment=/^#t=([A-Za-z0-9_-]{43})$/.exec(location.hash);
+var guardado=history.state && history.state.rvToken;
+var token=fragment ? fragment[1] : (typeof guardado==='string' && /^[A-Za-z0-9_-]{43}$/.test(guardado) ? guardado : null);
+if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.search);
   var byId=function(id){return document.getElementById(id)};
   var setText=function(id,value){byId(id).textContent=value == null ? '—' : String(value)};
   var show=function(id,visible){byId(id).classList.toggle('hidden',!visible)};
