@@ -126,6 +126,9 @@ if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.
   if(token)refresh();else revoke();
   setInterval(function(){if(!document.hidden&&token)refresh()},30000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&token)refresh()});
+    window.addEventListener('online',function(){
+    if(token && !document.hidden)refresh();
+  });
 })();
 </script>
 </body>
