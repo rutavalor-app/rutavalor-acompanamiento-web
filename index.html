@@ -105,10 +105,20 @@ if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.
       if(!res.ok)throw new Error('No se pudo consultar');
       var data=await res.json();if(!data||data.ok!==true){revoke();return}
       render(data);gotData=true;
-    }catch(e){
-      // Ante fallas de conexión no conservar una ubicación antigua en pantalla.
-      // El contacto podrá abrir nuevamente el enlace privado cuando haya conexión.
-      revoke();
+       }catch(e){
+      // Una falla temporal de conexión NO revoca el acceso.
+      // Conservamos el token para recuperar el seguimiento automáticamente.
+      // Ocultamos información anterior hasta obtener datos actualizados.
+      validMap=null;
+      mapOpen=false;
+      byId('mapa').src='about:blank';
+      show('mapa',false);
+      show('aviso-tercero',false);
+      show('principal',false);
+      show('denegado',false);
+      show('cargando',true);
+      byId('cargando').querySelector('.status').textContent=
+        'Conexión temporalmente interrumpida. Reintentando…';
     }finally{busy=false;byId('refrescar').disabled=false;}
   }
   byId('refrescar').addEventListener('click',refresh);
