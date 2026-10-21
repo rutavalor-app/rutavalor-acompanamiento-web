@@ -33,7 +33,7 @@
       <section class="panel"><div class="label">Comunicación</div><p class="value" id="comunicacion">—</p><p class="note">Estado reportado por RutaValor.</p></section>
       <section class="panel"><div class="label">Batería del celular</div><p class="value" id="bateria">—</p><p class="note" id="carga">Sin datos</p></section>
     </div>
-    <section class="panel"><div class="label">Última actualización</div><p class="value" id="hora">—</p><p class="note" id="reciente"></p></section>
+    <section class="panel"><div class="label">Último reporte del celular del conductor</div><p class="value" id="hora">—</p><p class="note">Esta es la hora de la última información del celular registrada en RutaValor. No significa que el conductor haya confirmado que está bien.</p><p class="note" id="reciente"></p></section>
   <section id="seccion-ubicacion" class="panel hidden"><h2>Ubicación del conductor</h2><p class="note" id="permiso">Comprobando autorización…</p>
       <button type="button" id="mostrar-mapa" class="hidden">Ver ubicación en mapa</button>
       <iframe id="mapa" class="hidden" title="Mapa de ubicación aproximada" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
@@ -81,7 +81,7 @@ if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.
     setText('bateria',bat&&typeof bat.porcentaje==='number'?bat.porcentaje+' %':'No disponible');
     setText('carga',bat&&typeof bat.cargando==='boolean'?(bat.cargando?'Cargando':'No está cargando'):'Sin lectura reciente');
     setText('hora',formatted(data.ultima_actualizacion_at));
-    setText('reciente',data.telemetria_reciente?'Última lectura capturada dentro de los últimos 10 minutos.':'No hay una lectura reciente; no se muestra batería ni ubicación como si fueran actuales.');
+    setText('reciente',data.telemetria_reciente?'Información reciente del celular del conductor.':'No hemos recibido información reciente. La batería y la ubicación podrían haber cambiado.');
     show('seccion-ubicacion',data.permiso_ubicacion===true);
     var m=data.permiso_ubicacion===true&&data.ubicacion_compartida===true?data.ubicacion:null;
     var lat=m?Number(m.latitud):NaN,lon=m?Number(m.longitud):NaN;
@@ -95,7 +95,7 @@ if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.
       show('mapa',false);show('aviso-tercero',false);show('mostrar-mapa',false);
     setText('permiso','No hay una ubicación reciente disponible.');
     }
-    setText('consultado','Última consulta: '+formatted(new Date().toISOString()));
+    setText('consultado','Esta página se consultó: '+formatted(new Date().toISOString()));
   }
   async function refresh(){
     if(!token||busy)return;busy=true;byId('refrescar').disabled=true;
