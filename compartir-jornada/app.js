@@ -21,9 +21,21 @@ info('Información autorizada por el conductor.');
 visible('data',true);
 el('permission').textContent=d.permiso==='solo_estado'?'Solo estado':d.permiso==='ultima_ubicacion'?'Estado y última ubicación':'Seguimiento de ubicación';
 el('expiry').textContent='El acceso vence: '+date(d.expira_at);
-el('locationStatus').textContent=d.ubicacion_disponible?'Ubicación actualizada: '+date(d.capturada_at):(d.permiso==='solo_estado'?'Sin acceso a coordenadas.':'No hay ubicación reciente disponible.');
+el('locationStatus').textContent=d.permiso==='solo_estado'
+  ?'Este enlace muestra únicamente el estado de la jornada.'
+  :d.ubicacion_autorizada===false
+    ?'Ubicación no disponible para este enlace.'
+    :d.ubicacion_disponible
+      ?(d.ubicacion_reciente===true
+        ?'Última ubicación registrada: '+date(d.capturada_at)+'.'
+        :'Última ubicación conocida: '+date(d.capturada_at)+'. El celular no ha enviado una posición más reciente. El conductor podría haberse desplazado.')
+      :'No hay ninguna ubicación registrada en esta jornada.';
 coord=d.ubicacion_disponible?d.ubicacion:null;
-visible('coords',!!coord);if(coord)el('point').textContent=coord.latitud+', '+coord.longitud;
+visible('coords',!!coord);
+if(coord){
+  el('point').textContent=coord.latitud+', '+coord.longitud;
+  el('map').textContent=d.ubicacion_reciente===true?'Ver ubicación en el mapa':'Ver última ubicación conocida en el mapa';
+}
 visible('receipt',d.confirmado_recibido!==true);
 if(timer)clearInterval(timer);timer=d.permiso==='seguimiento'?setInterval(refresh,30000):null
 }
