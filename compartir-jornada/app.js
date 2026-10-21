@@ -41,7 +41,18 @@ if(timer)clearInterval(timer);timer=d.permiso==='seguimiento'?setInterval(refres
 }
 async function refresh(){if(waiting)return;waiting=true;try{display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){hide();info('Conexión no disponible. Intenta nuevamente.',true)}finally{waiting=false}}
 async function action(name){if(waiting)return;waiting=true;try{var d=await post(api,{accion:name,token:token,acceso:proof});if(d.ok){display(await post(api,{accion:'consultar',token:token,acceso:proof}))}else{info('No pudimos realizar la acción. '+(d.codigo||''),true)}}catch(e){info('Error de conexión.',true)}finally{waiting=false}}
-el('verify').onclick=async function(){if(waiting)return;var code=el('otp').value.trim();if(!/^\d{4,10}$/.test(code)){info('Escribe el código numérico.',true);return}waiting=true;try{var d=await post(authApi,{accion:'confirmar_sms',token:token,codigo:code});if(!d.ok||!d.sesion_visualizador){info('Código inválido, vencido o bloqueado.',true);return}proof=d.sesion_visualizador;sessionStorage.setItem('rv_proof_'+token,proof);el('otp').value='';display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){info('No pudimos validar el SMS.',true)}finally{waiting=false}};
+el('verify').onclick=async function(){if(waiting)return;var code=el('otp').value.trim();if(!/^\d{4,10}$/.test(code)){info('Escribe el código numérico.',true);return}waiting=true;try{var d=await post(authApi,{accion:'confirmar_sms',token:token,codigo:code});if(!d.ok||!d.sesion_visualizador){
+  var message=d.codigo==='CODIGO_NO_COINCIDE'
+    ?'Twilio no reconoció el código recibido. Puedes volver a intentarlo mientras siga vigente.'
+    :d.codigo==='CODIGO_NO_VIGENTE' || d.codigo==='VALIDACION_NO_AUTORIZADA'
+      ?'Este código o enlace ya no está vigente. Solicita una nueva invitación.'
+      :d.codigo==='LIMITE_INTENTOS'
+        ?'Se alcanzó el límite de intentos. Solicita una nueva verificación.'
+        :d.codigo==='SERVICIO_VERIFICACION_NO_DISPONIBLE' || d.codigo==='CONFIGURACION_SMS_PENDIENTE'
+          ?'El servicio de verificación no respondió correctamente. Intenta nuevamente más tarde.'
+          :'No se pudo completar la verificación. El código no necesariamente ha vencido.';
+  info(message,true);return
+}proof=d.sesion_visualizador;sessionStorage.setItem('rv_proof_'+token,proof);el('otp').value='';display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){info('No pudimos validar el SMS.',true)}finally{waiting=false}};
 el('acceptBtn').onclick=function(){action('aceptar')};el('receipt').onclick=function(){action('confirmar_recibido')};el('refresh').onclick=refresh;
 el('map').onclick=function(){if(coord)window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(coord.latitud+','+coord.longitud),'_blank','noopener,noreferrer')};
 if(!/^[0-9a-f]{64}$/.test(token)){hide();info('Abre el enlace privado enviado por el conductor.',true);return}refresh()
