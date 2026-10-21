@@ -34,7 +34,7 @@
       <section class="panel"><div class="label">Batería del celular</div><p class="value" id="bateria">—</p><p class="note" id="carga">Sin datos</p></section>
     </div>
     <section class="panel"><div class="label">Último reporte del celular del conductor</div><p class="value" id="hora">—</p><p class="note">Esta es la hora de la última información del celular registrada en RutaValor. No significa que el conductor haya confirmado que está bien.</p><p class="note" id="reciente"></p></section>
-  <section id="seccion-ubicacion" class="panel hidden"><h2>Ubicación del conductor</h2><p class="note" id="permiso">Comprobando autorización…</p>
+  <section id="seccion-ubicacion" class="panel hidden"><h2>Última ubicación conocida del conductor</h2><p class="note" id="permiso">Comprobando autorización…</p>
       <button type="button" id="mostrar-mapa" class="hidden">Ver ubicación en mapa</button>
       <iframe id="mapa" class="hidden" title="Mapa de ubicación aproximada" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
       <p class="note hidden" id="aviso-tercero">El mapa utiliza OpenStreetMap solamente cuando decides abrirlo y puede compartir la ubicación consultada con ese servicio.</p>
@@ -87,13 +87,13 @@ if(fragment) history.replaceState({rvToken:token},'',location.pathname+location.
     var lat=m?Number(m.latitud):NaN,lon=m?Number(m.longitud):NaN;
     if(m&&Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180){
       validMap={lat:lat,lon:lon};
-      setText('permiso','Ubicación autorizada. Última posición: '+formatted(m.capturada_at)+'.');
+      setText('permiso',data.ubicacion_reciente===true?'Ubicación reciente registrada: '+formatted(m.capturada_at)+'.':'Última ubicación conocida: '+formatted(m.capturada_at)+'. El celular no ha enviado una posición más reciente. Esta ubicación podría no ser la actual.');
       show('mostrar-mapa',true);
       if(mapOpen)renderMap();
     } else {
       validMap=null;mapOpen=false;byId('mapa').src='about:blank';
       show('mapa',false);show('aviso-tercero',false);show('mostrar-mapa',false);
-    setText('permiso','No hay una ubicación reciente disponible.');
+    setText('permiso','No hay ninguna ubicación disponible de esta jornada.');
     }
     setText('consultado','Esta página se consultó: '+formatted(new Date().toISOString()));
   }
