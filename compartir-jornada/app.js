@@ -1,24 +1,78 @@
 
 (function(){'use strict';
 var api='https://rvsalufadckpcbgbgjrr.supabase.co/functions/v1/portal-compartir-jornada', authApi='https://rvsalufadckpcbgbgjrr.supabase.co/functions/v1/crear-comparticion-jornada';
+// Los fragmentos #t nunca viajan al servidor web. Mantenerlo en la URL
+// permite reabrir el enlace original desde WhatsApp tras cerrar Chrome.
+function getSession(key){try{return sessionStorage.getItem(key)||''}catch(e){return ''}}
+function setSession(key,value){try{sessionStorage.setItem(key,value)}catch(e){}}
 var tokenMatch=location.hash.match(/^#t=([0-9a-f]{64})$/i);
-var token=tokenMatch?tokenMatch[1].toLowerCase():(sessionStorage.getItem('rv_share_token')||'');
-if(tokenMatch){sessionStorage.setItem('rv_share_token',token);history.replaceState(null,'',location.pathname)}
-var proof=sessionStorage.getItem('rv_proof_'+token)||'', coord=null, timer=null, waiting=false;
+var token=tokenMatch?tokenMatch[1].toLowerCase():getSession('rv_share_token');
+if(tokenMatch)setSession('rv_share_token',token);
+var proof=getSession('rv_proof_'+token), coord=null, timer=null, waiting=false;
+var proofStorageKey=null;
+function clearProof(){
+  proof='';
+  try{sessionStorage.removeItem('rv_proof_'+token)}catch(e){}
+  try{if(proofStorageKey)localStorage.removeItem(proofStorageKey)}catch(e){}
+}
+function persistProof(expiry){
+  if(!proofStorageKey||!/^[0-9a-f]{64}$/.test(proof))return;
+  // Acceso cifrado NO se almacena: solo el testigo del SMS, sujeto a
+  // autorizacion del servidor en cada consulta y maximo 24h en este navegador.
+  var validUntil=Date.now()+24*60*60*1000, serverUntil=Date.parse(expiry||'');
+  if(Number.isFinite(serverUntil))validUntil=Math.min(validUntil,serverUntil);
+  if(validUntil<=Date.now()){clearProof();return}
+  try{localStorage.setItem(proofStorageKey,JSON.stringify({proof:proof,until:validUntil}))}catch(e){}
+}
+async function boot(){
+  try{
+    // Nunca guardar el enlace privado completo como clave de almacenamiento.
+    var bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
+    proofStorageKey='rv_share_proof_v1_'+Array.from(new Uint8Array(bytes),function(b){return b.toString(16).padStart(2,'0')}).join('');
+    var saved=localStorage.getItem(proofStorageKey);
+    if(saved){
+      var item=JSON.parse(saved);
+      if(item&&typeof item.proof==='string'&&/^[0-9a-f]{64}$/.test(item.proof)&&
+         typeof item.until==='number'&&item.until>Date.now()){
+        proof=item.proof;
+        setSession('rv_proof_'+token,proof);
+      }else localStorage.removeItem(proofStorageKey);
+    }
+  }catch(e){}
+  refresh();
+}
 function el(id){return document.getElementById(id)}
 function visible(id,on){el(id).classList.toggle('hidden',!on)}
 function info(t,error){el('status').textContent=t;el('status').className=error?'error':'status'}
-function hide(){['sms','accept','data'].forEach(function(k){visible(k,false)})}
+function hide(){['sms','accept','data','retry'].forEach(function(k){visible(k,false)})}
 function date(t){var d=new Date(t);return isNaN(d.getTime())?'':d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})}
 async function post(url,data){var response=await fetch(url,{method:'POST',credentials:'omit',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});return response.json()}
 function display(d){
-hide();if(!d.ok){info('Enlace no disponible o acceso vencido.',true);if(timer)clearInterval(timer);timer=null;return}
+hide();if(!d.ok){
+  if(timer)clearInterval(timer);timer=null;
+  var reason=d.codigo||'';
+  if(reason==='SESION_SMS_REQUERIDA'){
+    clearProof();
+    info('El navegador perdió la verificación SMS de esta invitación. Si la tienes abierta en otra pestaña, vuelve a usar esa pestaña; de lo contrario, solicita al conductor una nueva invitación.',true);
+  }else if(reason==='JORNADA_NO_VIGENTE'){
+    clearProof();info('La jornada finalizó o el acompañamiento ya no está disponible.',true);
+  }else if(reason==='NO_AUTORIZADO'||reason==='CONTACTO_NO_VIGENTE'){
+    clearProof();info('El enlace venció, fue revocado o ya no está autorizado.',true);
+  }else if(reason==='SERVICIO_INDISPONIBLE'){
+    info('No pudimos consultar el servidor. Intenta nuevamente.',true);
+  }else{
+    info('No se pudo comprobar el acceso ('+reason+').',true);
+  }
+  visible('retry',true);
+  return
+}
 if(d.estado==='pendiente_validacion'){info('Pendiente de verificación SMS.');visible('sms',true);return}
 
 if(d.estado==='pendiente_envio'){info('Invitación pendiente de aceptación.');visible('accept',true);return}
 if(d.estado!=='activa'){info('Acceso no disponible.',true);return}
 info('Información autorizada por el conductor.');
 visible('data',true);
+if(proof)persistProof(d.expira_at);
 el('permission').textContent=d.permiso==='solo_estado'?'Solo estado':d.permiso==='ultima_ubicacion'?'Estado y última ubicación':'Seguimiento de ubicación';
 el('expiry').textContent='El acceso vence: '+date(d.expira_at);
 el('locationStatus').textContent=d.permiso==='solo_estado'
@@ -39,7 +93,12 @@ if(coord){
 visible('receipt',d.confirmado_recibido!==true);
 if(timer)clearInterval(timer);timer=d.permiso==='seguimiento'?setInterval(refresh,30000):null
 }
-async function refresh(){if(waiting)return;waiting=true;try{display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){hide();info('Conexión no disponible. Intenta nuevamente.',true)}finally{waiting=false}}
+async function refresh(){
+  if(waiting)return;waiting=true;
+  try{display(await post(api,{accion:'consultar',token:token,acceso:proof}))}
+  catch(e){hide();visible('retry',true);info('No hay conexión con el servidor. Comprueba internet y vuelve a intentarlo.',true)}
+  finally{waiting=false}
+}
 async function action(name){if(waiting)return;waiting=true;try{var d=await post(api,{accion:name,token:token,acceso:proof});if(d.ok){display(await post(api,{accion:'consultar',token:token,acceso:proof}))}else{info('No pudimos realizar la acción. '+(d.codigo||''),true)}}catch(e){info('Error de conexión.',true)}finally{waiting=false}}
 el('verify').onclick=async function(){if(waiting)return;var code=el('otp').value.trim();if(!/^\d{4,10}$/.test(code)){info('Escribe el código numérico.',true);return}waiting=true;try{var d=await post(authApi,{accion:'confirmar_sms',token:token,codigo:code});if(!d.ok||!d.sesion_visualizador){
   var message=d.codigo==='CODIGO_NO_COINCIDE'
@@ -52,8 +111,11 @@ el('verify').onclick=async function(){if(waiting)return;var code=el('otp').value
           ?'El servicio de verificación no respondió correctamente. Intenta nuevamente más tarde.'
           :'No se pudo completar la verificación. El código no necesariamente ha vencido.';
   info(message,true);return
-}proof=d.sesion_visualizador;sessionStorage.setItem('rv_proof_'+token,proof);el('otp').value='';display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){info('No pudimos validar el SMS.',true)}finally{waiting=false}};
+}proof=d.sesion_visualizador;setSession('rv_proof_'+token,proof);persistProof();el('otp').value='';display(await post(api,{accion:'consultar',token:token,acceso:proof}))}catch(e){info('No pudimos validar el SMS.',true)}finally{waiting=false}};
+el('retry').onclick=refresh;
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&/^[0-9a-f]{64}$/.test(token))refresh()});
+window.addEventListener('pageshow',function(event){if(event.persisted&&/^[0-9a-f]{64}$/.test(token))refresh()});
 el('acceptBtn').onclick=function(){action('aceptar')};el('receipt').onclick=function(){action('confirmar_recibido')};el('refresh').onclick=refresh;
 el('map').onclick=function(){if(coord)window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(coord.latitud+','+coord.longitud),'_blank','noopener,noreferrer')};
-if(!/^[0-9a-f]{64}$/.test(token)){hide();info('Abre el enlace privado enviado por el conductor.',true);return}refresh()
+if(!/^[0-9a-f]{64}$/.test(token)){hide();info('Abre el enlace privado enviado por el conductor.',true);return}boot()
 })();
