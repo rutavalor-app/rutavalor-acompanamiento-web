@@ -46,7 +46,15 @@ function visible(id,on){el(id).classList.toggle('hidden',!on)}
 function info(t,error){el('status').textContent=t;el('status').className=error?'error':'status'}
 function hide(){['sms','accept','data','retry'].forEach(function(k){visible(k,false)})}
 function date(t){var d=new Date(t);return isNaN(d.getTime())?'':d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})}
-async function post(url,data){var response=await fetch(url,{method:'POST',credentials:'omit',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});return response.json()}
+async function post(url,data){
+  // Evitar consultas bloqueadas indefinidamente al regresar del segundo plano.
+  var cancel=new AbortController(), timeout=setTimeout(function(){cancel.abort()},15000);
+  try{
+    var response=await fetch(url,{method:'POST',credentials:'omit',cache:'no-store',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:cancel.signal});
+    return await response.json();
+  }finally{clearTimeout(timeout)}
+}
 function display(d){
 hide();if(!d.ok){
   if(timer)clearInterval(timer);timer=null;
@@ -115,6 +123,7 @@ el('verify').onclick=async function(){if(waiting)return;var code=el('otp').value
 el('retry').onclick=refresh;
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&/^[0-9a-f]{64}$/.test(token))refresh()});
 window.addEventListener('pageshow',function(event){if(event.persisted&&/^[0-9a-f]{64}$/.test(token))refresh()});
+window.addEventListener('online',function(){if(/^[0-9a-f]{64}$/.test(token))refresh()});
 el('acceptBtn').onclick=function(){action('aceptar')};el('receipt').onclick=function(){action('confirmar_recibido')};el('refresh').onclick=refresh;
 el('map').onclick=function(){if(coord)window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(coord.latitud+','+coord.longitud),'_blank','noopener,noreferrer')};
 if(!/^[0-9a-f]{64}$/.test(token)){hide();info('Abre el enlace privado enviado por el conductor.',true);return}boot()
